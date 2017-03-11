@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import RPi.GPIO as GPIO
 import sys
@@ -10,8 +10,8 @@ class Stepper():
         self.period = period
         self.step_pins = [37,35,33,31]
 
-    def spin(self, duration = 5):
-        """Duration is in seconds. Blocks until completion"""
+    def spin(self, duration = 5, forward_direction = True):
+        """Duration is in seconds. Blocks until completion."""
         if self.initialized == False:
             print("[E] Stepper did not initialize correctly, not spinning",
                   file = sys.stderr)
@@ -20,11 +20,16 @@ class Stepper():
         initial_time = datetime.utcnow()
         current_time = datetime.utcnow()
         step_counter = 0
+        if forward_direction:
+            seq = self.seq
+        else:
+            seq = self.seq[::-1]
+
         while (current_time - initial_time).seconds < duration:
             # TODO: get rid of step_counter (?)
             for pin in range(0, 4):
                 xpin = self.step_pins[pin]
-                if self.seq[step_counter][pin]!=0:
+                if seq[step_counter][pin]!=0:
                     GPIO.output(xpin, True)
                 else:
                     GPIO.output(xpin, False)
@@ -72,10 +77,11 @@ class Stepper():
             self.step_count = 0
             self.seq = [[0, 0, 0, 0]]
             print("[E] Please set the mode correctly", file = sys.stderr)
-            return
+            return self
 
         self.initialized = True
+        return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, etype, value, traceback):
         GPIO.cleanup()
 

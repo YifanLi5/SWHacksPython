@@ -13,6 +13,10 @@ def initialize():
     firebase = pyrebase.initialize_app(config)
     return firebase
 
+def feed_fish():
+    
+
+
 def update_field(db, key, value):
     db.update({key : value})
 
