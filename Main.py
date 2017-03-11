@@ -1,0 +1,1 @@
+print("def y(foo):")
