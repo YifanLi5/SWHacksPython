@@ -1,83 +1,81 @@
-# import required libs
+from datetime import datetime
 import time
 import RPi.GPIO as GPIO
+import sys
 
- 
-# Use BOARD references
-GPIO.setmode(GPIO.BOARD)
- 
-# be sure you are setting pins accordingly
-# GPIO10,GPIO9,GPIO11,GPI25
-StepPins = [37,35,33,31]
- 
-# Set all pins as output
-for pin in StepPins:
-  GPIO.setup(pin,GPIO.OUT)
-  GPIO.output(pin, False)
+class Stepper():
+    def __init__(self, mode = "Default", period = 3.0/2000.0):
+        self.mode = mode
+        self.initialized = False
+        self.period = period
+        self.step_pins = [37,35,33,31]
 
-#wait some time to start
-time.sleep(0.5)
- 
-# Define some settings
-StepCounter = 0
-WaitTime = 3.0/2000
- 
-# Define simple sequence
-StepCount1 = 4
-Seq1 = [0,0,0,0]
-Seq1[0] = [1,0,0,0]
-Seq1[1] = [0,1,0,0]
-Seq1[2] = [0,0,1,0]
-Seq1[3] = [0,0,0,1]
- 
-# Define advanced sequence
-# as shown in manufacturers datasheet
-StepCount2 = 8
-Seq2 = [0]*8
-Seq2[0] = [1,0,0,0]
-Seq2[1] = [1,1,0,0]
-Seq2[2] = [0,1,0,0]
-Seq2[3] = [0,1,1,0]
-Seq2[4] = [0,0,1,0]
-Seq2[5] = [0,0,1,1]
-Seq2[6] = [0,0,0,1]
-Seq2[7] = [1,0,0,1]
+    def spin(self, duration = 5):
+        """Duration is in seconds. Blocks until completion"""
+        if self.initialized == False:
+            print("[E] Stepper did not initialize correctly, not spinning",
+                  file = sys.stderr)
+            time.sleep(duration)
+            return
+        initial_time = datetime.utcnow()
+        current_time = datetime.utcnow()
+        step_counter = 0
+        while (current_time - initial_time).seconds < duration:
+            # TODO: get rid of step_counter (?)
+            for pin in range(0, 4):
+                xpin = self.step_pins[pin]
+                if self.seq[step_counter][pin]!=0:
+                    GPIO.output(xpin, True)
+                else:
+                    GPIO.output(xpin, False)
+            step_counter += 1
 
-#Full torque
-StepCount3 = 4
-Seq3 = [0,0,0,0]
-Seq3[0] = [0,0,1,1]
-Seq3[1] = [1,0,0,1]
-Seq3[2] = [1,1,0,0]
-Seq3[3] = [0,1,1,0]
- 
-# set
-Seq = Seq2
-StepCount = StepCount2
- 
-# Start main loop
-try:
-  while True:
-    for pin in range(0, 4):
-      xpin = StepPins[pin]
-      if Seq[StepCounter][pin]!=0:
-        #print " Step %i Enable %i" %(StepCounter,xpin)
-        GPIO.output(xpin, True)
-      else:
-        GPIO.output(xpin, False)
-    StepCounter += 1
+            # restart sequence
+            if (step_counter == self.step_count):
+                step_counter = 0
+            time.sleep(self.period)
+            current_time = datetime.utcnow()
 
-  # If we reach the end of the sequence
-  # start again
-    if (StepCounter==StepCount):
-      StepCounter = 0
-    if (StepCounter<0):
-      StepCounter = StepCount
- 
-  # Wait before moving on
-    time.sleep(WaitTime)
-except:
-  #GPIO.cleanup();
-  pass
-finally: #cleaning up and setting pins to low again (motors can get hot if you wont) 
-  GPIO.cleanup();
+    def __enter__(self):
+        GPIO.setmode(GPIO.BOARD)
+        for pin in self.step_pins:
+            GPIO.setup(pin,GPIO.OUT)
+            GPIO.output(pin, False)
+        time.sleep(0.1)
+
+        if self.mode == "Basic":
+            self.step_count = 4
+            self.seq = [[1,0,0,0],
+                        [0,1,0,0],
+                        [0,0,1,0],
+                        [0,0,0,1]]
+        elif self.mode == "Default":
+            self.step_count = 8
+            self.seq = [[1,0,0,0],
+                        [1,1,0,0],
+                        [0,1,0,0],
+                        [0,1,1,0],
+                        [0,0,1,0],
+                        [0,0,1,1],
+                        [0,0,0,1],
+                        [1,0,0,1]]
+
+        elif self.mode == "Torque":
+            self.step_count = 4
+            self.seq = [[0,0,1,1],
+                        [1,0,0,1],
+                        [1,1,0,0],
+                        [0,1,1,0]]
+        else:
+            # don't set initialized flag, we don't know
+            # which mode to use the motor in
+            self.step_count = 0
+            self.seq = [[0, 0, 0, 0]]
+            print("[E] Please set the mode correctly", file = sys.stderr)
+            return
+
+        self.initialized = True
+
+    def __exit__(self, type, value, traceback):
+        GPIO.cleanup()
+
